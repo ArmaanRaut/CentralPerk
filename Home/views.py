@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect
 from django.views.generic import TemplateView
+from django.db.models import F
 from Home.models import PostModel, UserNotification
 from Home.forms import PostForm
 from Profile.models import Friends, User
@@ -18,7 +19,7 @@ class home_view(TemplateView):
             'location', 'user__username', 'user__profile_pic', 
             'date_time', 'likes_count', 'post_id', named=True)
         notifications = request.user.notifications.all().values_list(
-            'poked_by', 'date_time', 'reaction', 'poked_by__profile_pic',named=True)
+            'poked_by', 'date_time', 'reaction', 'poked_by__profile_pic', named=True)
 
         args = { 'form':form, 'posts':posts, 'notifications':notifications }
         return render(request, self.template_name, context=args)
@@ -46,16 +47,18 @@ def manage_home_post_likes(request, post_id):
 
     if user in post.likes.all():
         # Dislike post
-        post.likes_count -= 1
         post.likes.remove(user)
+        post.likes_count = F('likes_count') + 1
+        post.save()
     else:
         # Like post
-        post.likes_count += 1
         post.likes.add(user)
+        post.likes_count = F('likes_count') + 1
+        post.save()
+
         tz = pytz.timezone('Asia/Kolkata')
         now = datetime.now().astimezone(tz)
         # Notify the user whose post is being liked
         send_notifications.delay(username=request.user.username, reaction="Liked", date_time=now, post_id=post_id)
-
-    post.save()
+        
     return redirect('/home/')
